@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -21,59 +22,44 @@ interface Node {
 }
 
 const NodeMonitor = () => {
-  // Mock data for nodes
-  const nodes: Node[] = [
-    {
-      id: "node-1",
-      name: "node-01",
-      status: "Ready",
-      role: "master",
-      cpu: "2000m",
-      memory: "7800Mi",
-      pods: 15,
-      age: "2w"
-    },
-    {
-      id: "node-2",
-      name: "node-02",
-      status: "Ready",
-      role: "worker",
-      cpu: "4000m",
-      memory: "15600Mi",
-      pods: 25,
-      age: "1w"
-    },
-    {
-      id: "node-3",
-      name: "node-03",
-      status: "NotReady",
-      role: "worker",
-      cpu: "0m",
-      memory: "0Mi",
-      pods: 0,
-      age: "3d"
-    },
-    {
-      id: "node-4",
-      name: "node-04",
-      status: "Ready",
-      role: "worker",
-      cpu: "3000m",
-      memory: "11700Mi",
-      pods: 20,
-      age: "3w"
-    },
-    {
-      id: "node-5",
-      name: "node-05",
-      status: "SchedulingDisabled",
-      role: "worker",
-      cpu: "1500m",
-      memory: "3900Mi",
-      pods: 10,
-      age: "1m"
-    },
-  ];
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchNodes = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/my/v1/cluster-monitor');
+        const data = await response.json();
+        
+        if (data.error) {
+          setError(data.error);
+        } else {
+          // Process nodes data to match expected format
+          const processedNodes: Node[] = data.nodes.items.map((node: any) => ({
+            id: node.name,
+            name: node.name,
+            status: node.status || 'Unknown',
+            role: node.labels && node.labels['node-role.kubernetes.io/control-plane'] ? 'master' : 'worker',
+            cpu: 'N/A', // We don't have cpu data in the API yet
+            memory: 'N/A', // We don't have memory data in the API yet
+            pods: 0, // We don't have pod count data in the API yet
+            age: 'N/A' // We don't have age data in the API yet
+          }));
+          
+          setNodes(processedNodes);
+        }
+      } catch (err) {
+        setError('Failed to fetch nodes data');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNodes();
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -87,6 +73,36 @@ const NodeMonitor = () => {
         return 'bg-gray-100 text-gray-800';
     }
   };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Node Monitoring</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64">
+            <p>Loading nodes data...</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Node Monitoring</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64">
+            <p className="text-red-500">Error: {error}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -20,54 +21,43 @@ interface Pod {
 }
 
 const PodMonitor = () => {
-  // Mock data for pods
-  const pods: Pod[] = [
-    {
-      id: "pod-1",
-      name: "web-app-6d5f8c7b9-xyz12",
-      namespace: "default",
-      status: "Running",
-      restarts: 0,
-      age: "2d",
-      node: "node-01"
-    },
-    {
-      id: "pod-2",
-      name: "api-server-7b8c9d0e1-abc23",
-      namespace: "kube-system",
-      status: "Pending",
-      restarts: 1,
-      age: "1h",
-      node: "node-02"
-    },
-    {
-      id: "pod-3",
-      name: "db-mysql-5d6e7f8c9-def34",
-      namespace: "production",
-      status: "Failed",
-      restarts: 5,
-      age: "3d",
-      node: "node-01"
-    },
-    {
-      id: "pod-4",
-      name: "cache-redis-9a8b7c6d5-efg56",
-      namespace: "default",
-      status: "Running",
-      restarts: 0,
-      age: "5d",
-      node: "node-03"
-    },
-    {
-      id: "pod-5",
-      name: "monitoring-agent-123456789-xyz01",
-      namespace: "monitoring",
-      status: "Running",
-      restarts: 2,
-      age: "1w",
-      node: "node-01"
-    },
-  ];
+  const [pods, setPods] = useState<Pod[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchPods = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/my/v1/cluster-monitor');
+        const data = await response.json();
+        
+        if (data.error) {
+          setError(data.error);
+        } else {
+          // Process pods data to match expected format
+          const processedPods: Pod[] = data.pods.items.map((pod: any) => ({
+            id: pod.name,
+            name: pod.name,
+            namespace: pod.namespace || 'default',
+            status: pod.status || 'Unknown',
+            restarts: 0, // We don't have restarts data in the API yet
+            age: 'N/A', // We don't have age data in the API yet
+            node: pod.node || 'N/A'
+          }));
+          
+          setPods(processedPods);
+        }
+      } catch (err) {
+        setError('Failed to fetch pods data');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPods();
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -83,6 +73,36 @@ const PodMonitor = () => {
         return 'bg-gray-100 text-gray-800';
     }
   };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Pod Monitoring</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64">
+            <p>Loading pods data...</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Pod Monitoring</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64">
+            <p className="text-red-500">Error: {error}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

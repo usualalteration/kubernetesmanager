@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -21,59 +22,44 @@ interface Pvc {
 }
 
 const PvcMonitor = () => {
-  // Mock data for PVCs
-  const pvcs: Pvc[] = [
-    {
-      id: "pvc-1",
-      name: "data-pvc",
-      namespace: "default",
-      status: "Bound",
-      capacity: "20Gi",
-      used: "10Gi",
-      storageClass: "standard",
-      age: "2d"
-    },
-    {
-      id: "pvc-2",
-      name: "logs-pvc",
-      namespace: "kube-system",
-      status: "Bound",
-      capacity: "15Gi",
-      used: "5Gi",
-      storageClass: "standard",
-      age: "1w"
-    },
-    {
-      id: "pvc-3",
-      name: "database-pvc",
-      namespace: "production",
-      status: "Bound",
-      capacity: "100Gi",
-      used: "85Gi",
-      storageClass: "fast",
-      age: "3w"
-    },
-    {
-      id: "pvc-4",
-      name: "temp-pvc",
-      namespace: "temp",
-      status: "Pending",
-      capacity: "5Gi",
-      used: "0Gi",
-      storageClass: "standard",
-      age: "1h"
-    },
-    {
-      id: "pvc-5",
-      name: "backup-pvc",
-      namespace: "backup",
-      status: "Lost",
-      capacity: "50Gi",
-      used: "40Gi",
-      storageClass: "standard",
-      age: "1m"
-    },
-  ];
+  const [pvcs, setPvcs] = useState<Pvc[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchPvcs = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/my/v1/cluster-monitor');
+        const data = await response.json();
+        
+        if (data.error) {
+          setError(data.error);
+        } else {
+          // Process PVCs data to match expected format
+          const processedPvcs: Pvc[] = data.pvcs.items.map((pvc: any) => ({
+            id: pvc.name,
+            name: pvc.name,
+            namespace: pvc.namespace || 'default',
+            status: pvc.status || 'Unknown',
+            capacity: pvc.capacity || 'N/A',
+            used: 'N/A', // We don't have used data in the API yet
+            storageClass: pvc.storageClass || 'N/A',
+            age: 'N/A' // We don't have age data in the API yet
+          }));
+          
+          setPvcs(processedPvcs);
+        }
+      } catch (err) {
+        setError('Failed to fetch PVCs data');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPvcs();
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -87,6 +73,36 @@ const PvcMonitor = () => {
         return 'bg-gray-100 text-gray-800';
     }
   };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>PVC Monitoring</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64">
+            <p>Loading PVCs data...</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>PVC Monitoring</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-64">
+            <p className="text-red-500">Error: {error}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
