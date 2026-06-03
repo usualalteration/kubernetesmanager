@@ -145,41 +145,46 @@ const Dashboard = () => {
       {/* Navigation */}
       <nav className="border-b">
         <div className="container flex items-center space-x-4 px-4 py-2">
-          <NavLink 
-            to="/dashboard" 
-            className="text-sm font-medium transition-colors hover:text-primary"
-            activeClassName="text-primary"
+          <button
+            onClick={() => setActiveTab("pods")}
+            className={`text-sm font-medium transition-colors hover:text-primary ${
+              activeTab === "pods" ? "text-primary" : "text-muted-foreground"
+            }`}
           >
             Dashboard
-          </NavLink>
-          <NavLink 
-            to="/dashboard/pods" 
-            className="text-sm font-medium transition-colors hover:text-primary"
-            activeClassName="text-primary"
+          </button>
+          <button
+            onClick={() => setActiveTab("pods")}
+            className={`text-sm font-medium transition-colors hover:text-primary ${
+              activeTab === "pods" ? "text-primary" : "text-muted-foreground"
+            }`}
           >
             Pods
-          </NavLink>
-          <NavLink 
-            to="/dashboard/pvcs" 
-            className="text-sm font-medium transition-colors hover:text-primary"
-            activeClassName="text-primary"
+          </button>
+          <button
+            onClick={() => setActiveTab("pvcs")}
+            className={`text-sm font-medium transition-colors hover:text-primary ${
+              activeTab === "pvcs" ? "text-primary" : "text-muted-foreground"
+            }`}
           >
             PVCs
-          </NavLink>
-          <NavLink 
-            to="/dashboard/nodes" 
-            className="text-sm font-medium transition-colors hover:text-primary"
-            activeClassName="text-primary"
+          </button>
+          <button
+            onClick={() => setActiveTab("nodes")}
+            className={`text-sm font-medium transition-colors hover:text-primary ${
+              activeTab === "nodes" ? "text-primary" : "text-muted-foreground"
+            }`}
           >
             Nodes
-          </NavLink>
-          <NavLink 
-            to="/dashboard/chat" 
-            className="text-sm font-medium transition-colors hover:text-primary"
-            activeClassName="text-primary"
+          </button>
+          <button
+            onClick={() => setActiveTab("chat")}
+            className={`text-sm font-medium transition-colors hover:text-primary ${
+              activeTab === "chat" ? "text-primary" : "text-muted-foreground"
+            }`}
           >
             Chat
-          </NavLink>
+          </button>
         </div>
       </nav>
 

@@ -101,57 +101,39 @@ const ChatInterface = () => {
     setInputValue('');
     setLoading(true);
     
-    // Simulate AI response with data
-    setTimeout(() => {
-      let response = '';
+    try {
+      const response = await fetch('/api/my/v1/ai-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: inputValue
+        })
+      });
       
-      if (inputValue.toLowerCase().includes('pod')) {
-        if (clusterData) {
-          response = `In your cluster, there are ${clusterData.pods.total} pods in total. 
-            ${clusterData.pods.running} are running, ${clusterData.pods.pending} are pending, and 
-            ${clusterData.pods.failed} have failed.`;
-        } else {
-          response = 'I can see pods in your cluster. Let me get detailed information about them.';
-        }
-      } else if (inputValue.toLowerCase().includes('pvc')) {
-        if (clusterData) {
-          response = `Your cluster has ${clusterData.pvcs.total} PVCs in total. 
-            ${clusterData.pvcs.bound} are bound, ${clusterData.pvcs.pending} are pending, and 
-            ${clusterData.pvcs.lost} are lost.`;
-        } else {
-          response = 'I can see PVCs in your cluster. Let me get detailed information about them.';
-        }
-      } else if (inputValue.toLowerCase().includes('node')) {
-        if (clusterData) {
-          response = `Your cluster has ${clusterData.nodes.total} nodes in total. 
-            ${clusterData.nodes.ready} are ready, ${clusterData.nodes.notReady} are not ready, and 
-            ${clusterData.nodes.schedulingDisabled} have scheduling disabled.`;
-        } else {
-          response = 'I can see nodes in your cluster. Let me get detailed information about them.';
-        }
-      } else if (inputValue.toLowerCase().includes('health') || inputValue.toLowerCase().includes('status')) {
-        if (clusterData) {
-          response = `Cluster health report:
-            - Pods: ${clusterData.pods.total} total (${clusterData.pods.running} running, ${clusterData.pods.failed} failed)
-            - PVCs: ${clusterData.pvcs.total} total (${clusterData.pvcs.bound} bound, ${clusterData.pvcs.lost} lost)
-            - Nodes: ${clusterData.nodes.total} total (${clusterData.nodes.ready} ready, ${clusterData.nodes.notReady} not ready)`;
-        } else {
-          response = 'Your cluster seems healthy. I can get more detailed information if you ask about specific resources.';
-        }
-      } else {
-        response = "I'm your Kubernetes assistant. I can help you understand your cluster's status and resources. Try asking about pods, PVCs, or nodes!";
-      }
+      const data = await response.json();
       
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: response,
+        content: data.response || data.error || "I'm sorry, I couldn't process your request.",
         sender: 'assistant',
         timestamp: new Date(),
       };
       
       setMessages(prev => [...prev, aiResponse]);
       setLoading(false);
-    }, 1000);
+    } catch (error) {
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: "Sorry, I encountered an error processing your request. Please try again.",
+        sender: 'assistant',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      setLoading(false);
+      console.error('Chat error:', error);
+    }
   };
 
   return (
