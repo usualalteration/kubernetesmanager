@@ -5,41 +5,48 @@ from kubernetes.client.rest import ApiException
 
 def main(args, ctx=None):
     try:
-        # Load kubeconfig from S3 or environment
-        kubeconfig_content = None
-        
-        if 'KUBECONFIG_PATH' in os.environ:
-            # Load from environment variable
-            config.load_kube_config(filename=os.environ['KUBECONFIG_PATH'])
-        elif ctx and ctx.S3_CLIENT:
-            # Try to load from S3
+        # Load kubeconfig from S3
+        if ctx and ctx.S3_CLIENT:
             try:
+                print("DEBUG: Listing kubeconfigs in S3...")
                 # List kubeconfigs in S3
                 response = ctx.S3_CLIENT.list_objects_v2(Bucket=ctx.S3_DATA, Prefix='kubeconfigs/')
                 if 'Contents' in response and len(response['Contents']) > 0:
+                    print(f"DEBUG: Found {len(response['Contents'])} kubeconfig(s)")
                     # Get the most recent kubeconfig
                     latest_file = max(response['Contents'], key=lambda x: x['LastModified'])
+                    print(f"DEBUG: Loading kubeconfig: {latest_file['Key']}")
                     obj = ctx.S3_CLIENT.get_object(Bucket=ctx.S3_DATA, Key=latest_file['Key'])
                     kubeconfig_content = obj['Body'].read().decode('utf-8')
+                    print(f"DEBUG: Kubeconfig loaded, length: {len(kubeconfig_content)}")
                     
-                    # Load from memory
-                    from kubernetes.config import kube_config
-                    kube_config.load_kube_config_from_dict(kube_config.yaml.safe_load(kubeconfig_content))
+                    # Load from memory using load_kube_config_from_dict
+                    from kubernetes import config as k8s_config
+                    import yaml
+                    kubeconfig_dict = yaml.safe_load(kubeconfig_content)
+                    print(f"DEBUG: Kubeconfig parsed, clusters: {len(kubeconfig_dict.get('clusters', []))}")
+                    k8s_config.load_kube_config_from_dict(kubeconfig_dict)
                 else:
                     return json.dumps({
                         "error": "Invalid kube-config file. No configuration found.",
                         "message": "No kubeconfig file found in storage"
                     })
             except Exception as e:
+                print(f"DEBUG: Error loading from S3: {str(e)}")
                 return json.dumps({
                     "error": f"Failed to load kubeconfig from S3: {str(e)}",
                     "message": "Please upload a valid kubeconfig file first"
                 })
         else:
-            return json.dumps({
-                "error": "Invalid kube-config file. No configuration found.",
-                "message": "No kubeconfig available"
-            })
+            print("DEBUG: No S3 client available")
+            # Try to load from default location
+            try:
+                config.load_kube_config()
+            except Exception as e:
+                return json.dumps({
+                    "error": "Invalid kube-config file. No configuration found.",
+                    "message": f"No kubeconfig available: {str(e)}"
+                })
         
         # Create API instances
         v1 = client.CoreV1Api()
