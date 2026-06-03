@@ -32,7 +32,13 @@ const Dashboard = () => {
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        // Remove data URL prefix (e.g., "data:text/plain;base64,")
+        const base64 = result?.split(',')[1];
+        console.log("Base64 length:", base64?.length);
+        resolve(base64);
+      };
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
@@ -46,6 +52,8 @@ const Dashboard = () => {
       try {
         setIsUploading(true);
         const base64Data = await fileToBase64(file);
+        console.log("Base64 data length:", base64Data?.length);
+        console.log("Base64 data first 50 chars:", base64Data?.substring(0, 50));
         
         const response = await fetch('/api/my/v1/upload-kubeconfig', {
           method: 'POST',
@@ -59,6 +67,10 @@ const Dashboard = () => {
         });
         
         const result = await response.json();
+        alert("Risultato: " + JSON.stringify(result, null, 2));
+        console.log("Kubeconfig validation result:", result);
+        console.log("File name:", file.name);
+        console.log("File size:", file.size);
         
         if (result.valid) {
           toast.success(`Kubeconfig "${file.name}" caricato con successo!`);

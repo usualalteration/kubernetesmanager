@@ -7,14 +7,22 @@ def main(args, ctx=None):
     file_data = args.get("file_data")
     file_name = args.get("file_name")
     
+    print(f"DEBUG: file_data type = {type(file_data)}")
+    print(f"DEBUG: file_data length = {len(str(file_data)) if file_data else 0}")
+    print(f"DEBUG: file_data first 100 chars = {str(file_data)[:100] if file_data else 'None'}")
+    
     if not file_data:
         return {"error": "No file data provided"}
     
     # Decode base64 file data
     try:
+        # file_data comes as string from JSON
         file_content = base64.b64decode(file_data)
         file_content_str = file_content.decode('utf-8')
+        print(f"DEBUG: Successfully decoded file, length: {len(file_content_str)}")
+        print(f"DEBUG: First 100 chars: {file_content_str[:100]}")
     except Exception as e:
+        print(f"DEBUG: Decoding error: {str(e)}")
         return {"error": f"Failed to decode file: {str(e)}"}
     
     # Validate YAML structure

@@ -5,11 +5,41 @@ from kubernetes.client.rest import ApiException
 
 def main(args, ctx=None):
     try:
-        # Load kubeconfig
-        if 'KUBECONFIG' in os.environ:
-            config.load_kube_config(os.environ['KUBECONFIG'])
+        # Load kubeconfig from S3 or environment
+        kubeconfig_content = None
+        
+        if 'KUBECONFIG_PATH' in os.environ:
+            # Load from environment variable
+            config.load_kube_config(filename=os.environ['KUBECONFIG_PATH'])
+        elif ctx and ctx.S3_CLIENT:
+            # Try to load from S3
+            try:
+                # List kubeconfigs in S3
+                response = ctx.S3_CLIENT.list_objects_v2(Bucket=ctx.S3_DATA, Prefix='kubeconfigs/')
+                if 'Contents' in response and len(response['Contents']) > 0:
+                    # Get the most recent kubeconfig
+                    latest_file = max(response['Contents'], key=lambda x: x['LastModified'])
+                    obj = ctx.S3_CLIENT.get_object(Bucket=ctx.S3_DATA, Key=latest_file['Key'])
+                    kubeconfig_content = obj['Body'].read().decode('utf-8')
+                    
+                    # Load from memory
+                    from kubernetes.config import kube_config
+                    kube_config.load_kube_config_from_dict(kube_config.yaml.safe_load(kubeconfig_content))
+                else:
+                    return json.dumps({
+                        "error": "Invalid kube-config file. No configuration found.",
+                        "message": "No kubeconfig file found in storage"
+                    })
+            except Exception as e:
+                return json.dumps({
+                    "error": f"Failed to load kubeconfig from S3: {str(e)}",
+                    "message": "Please upload a valid kubeconfig file first"
+                })
         else:
-            config.load_kube_config()
+            return json.dumps({
+                "error": "Invalid kube-config file. No configuration found.",
+                "message": "No kubeconfig available"
+            })
         
         # Create API instances
         v1 = client.CoreV1Api()
