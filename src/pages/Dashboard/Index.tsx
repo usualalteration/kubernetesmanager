@@ -142,52 +142,6 @@ const Dashboard = () => {
         </div>
       </header>
 
-      {/* Navigation */}
-      <nav className="border-b">
-        <div className="container flex items-center space-x-4 px-4 py-2">
-          <button
-            onClick={() => setActiveTab("pods")}
-            className={`text-sm font-medium transition-colors hover:text-primary ${
-              activeTab === "pods" ? "text-primary" : "text-muted-foreground"
-            }`}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={() => setActiveTab("pods")}
-            className={`text-sm font-medium transition-colors hover:text-primary ${
-              activeTab === "pods" ? "text-primary" : "text-muted-foreground"
-            }`}
-          >
-            Pods
-          </button>
-          <button
-            onClick={() => setActiveTab("pvcs")}
-            className={`text-sm font-medium transition-colors hover:text-primary ${
-              activeTab === "pvcs" ? "text-primary" : "text-muted-foreground"
-            }`}
-          >
-            PVCs
-          </button>
-          <button
-            onClick={() => setActiveTab("nodes")}
-            className={`text-sm font-medium transition-colors hover:text-primary ${
-              activeTab === "nodes" ? "text-primary" : "text-muted-foreground"
-            }`}
-          >
-            Nodes
-          </button>
-          <button
-            onClick={() => setActiveTab("chat")}
-            className={`text-sm font-medium transition-colors hover:text-primary ${
-              activeTab === "chat" ? "text-primary" : "text-muted-foreground"
-            }`}
-          >
-            Chat
-          </button>
-        </div>
-      </nav>
-
       {/* Main Content */}
       <main className="container py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

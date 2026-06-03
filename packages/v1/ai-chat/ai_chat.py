@@ -6,7 +6,7 @@ import requests
 import os
 
 OLLAMA_URL = os.environ.get('OLLAMA_URL', 'http://ollama:11434')
-OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama2')
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'qwen3.5:35b')
 
 def main(args, ctx=None):
     query = args.get("query", "").strip()
@@ -179,17 +179,22 @@ Please provide a helpful and accurate response based on the cluster data above. 
     
     try:
         response = requests.post(
-            f"{OLLAMA_URL}/api/generate",
+            f"{OLLAMA_URL}/api/chat",
             json={
                 "model": OLLAMA_MODEL,
-                "prompt": prompt,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
                 "stream": False
             },
             timeout=60
         )
         response.raise_for_status()
         result = response.json()
-        return result.get('response', 'No response from LLM')
+        return result.get('message', {}).get('content', 'No response from LLM')
     except requests.exceptions.RequestException as e:
         print(f"DEBUG: Ollama request failed: {str(e)}")
         raise Exception(f"Failed to connect to Ollama: {str(e)}")
