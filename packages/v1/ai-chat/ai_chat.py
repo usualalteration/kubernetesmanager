@@ -154,8 +154,6 @@ def main(args, ctx=None):
             response = generate_response(query, pods_data, pvcs_data, nodes_data, deployments_data)
             return json.dumps(response)
         
-        return json.dumps(response)
-        
     except ApiException as e:
         print(f"DEBUG: Kubernetes API error: {str(e)}")
         import traceback
