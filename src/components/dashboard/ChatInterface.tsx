@@ -113,26 +113,36 @@ const ChatInterface = () => {
       });
       
       const data = await response.json();
+      console.log('AI Chat response:', data);
       
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        content: data.response || data.error || "I'm sorry, I couldn't process your request.",
-        sender: 'assistant',
-        timestamp: new Date(),
-      };
-      
-      setMessages(prev => [...prev, aiResponse]);
+      if (data.error) {
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: `Error: ${data.error}\n\nMessage: ${data.message || 'Unknown error'}`,
+          sender: 'assistant',
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      } else {
+        const aiResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          content: data.response || "I received your request but couldn't provide a meaningful answer.",
+          sender: 'assistant',
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, aiResponse]);
+      }
       setLoading(false);
     } catch (error) {
+      console.error('Chat error:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: "Sorry, I encountered an error processing your request. Please try again.",
+        content: `Network error: ${error instanceof Error ? error.message : String(error)}`,
         sender: 'assistant',
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
       setLoading(false);
-      console.error('Chat error:', error);
     }
   };
 

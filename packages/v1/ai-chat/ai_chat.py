@@ -7,6 +7,7 @@ def main(args, ctx=None):
     query = args.get("query", "").lower().strip()
     print(f"DEBUG: Query received: {query}")
     print(f"DEBUG: ctx type: {type(ctx)}")
+    print(f"DEBUG: ctx is None: {ctx is None}")
     print(f"DEBUG: ctx.S3_CLIENT: {ctx.S3_CLIENT if ctx else 'No ctx'}")
     
     if not query:
@@ -20,6 +21,7 @@ def main(args, ctx=None):
         if ctx and ctx.S3_CLIENT:
             try:
                 print("DEBUG: Listing kubeconfigs in S3...")
+                print(f"DEBUG: ctx.S3_DATA: {ctx.S3_DATA}")
                 response = ctx.S3_CLIENT.list_objects_v2(Bucket=ctx.S3_DATA, Prefix='kubeconfigs/')
                 print(f"DEBUG: S3 response: {response}")
                 if 'Contents' in response and len(response['Contents']) > 0:
@@ -48,6 +50,7 @@ def main(args, ctx=None):
                 })
         else:
             print("DEBUG: No S3 client available")
+            print(f"DEBUG: ctx: {ctx}")
             return json.dumps({
                 "error": "No S3 client available",
                 "message": "Configuration error"
