@@ -5,6 +5,9 @@ import yaml
 
 def main(args, ctx=None):
     query = args.get("query", "").lower().strip()
+    print(f"DEBUG: Query received: {query}")
+    print(f"DEBUG: ctx type: {type(ctx)}")
+    print(f"DEBUG: ctx.S3_CLIENT: {ctx.S3_CLIENT if ctx else 'No ctx'}")
     
     if not query:
         return json.dumps({
@@ -16,38 +19,62 @@ def main(args, ctx=None):
         # Load kubeconfig from S3
         if ctx and ctx.S3_CLIENT:
             try:
+                print("DEBUG: Listing kubeconfigs in S3...")
                 response = ctx.S3_CLIENT.list_objects_v2(Bucket=ctx.S3_DATA, Prefix='kubeconfigs/')
+                print(f"DEBUG: S3 response: {response}")
                 if 'Contents' in response and len(response['Contents']) > 0:
                     latest_file = max(response['Contents'], key=lambda x: x['LastModified'])
+                    print(f"DEBUG: Loading kubeconfig: {latest_file['Key']}")
                     obj = ctx.S3_CLIENT.get_object(Bucket=ctx.S3_DATA, Key=latest_file['Key'])
                     kubeconfig_content = obj['Body'].read().decode('utf-8')
+                    print(f"DEBUG: Kubeconfig loaded, length: {len(kubeconfig_content)}")
                     kubeconfig_dict = yaml.safe_load(kubeconfig_content)
+                    print(f"DEBUG: Kubeconfig parsed, clusters: {len(kubeconfig_dict.get('clusters', []))}")
                     config.load_kube_config_from_dict(kubeconfig_dict)
+                    print("DEBUG: Kubeconfig loaded successfully")
                 else:
+                    print("DEBUG: No kubeconfigs found in S3")
                     return json.dumps({
                         "error": "No kubeconfig found",
                         "message": "Please upload a kubeconfig file first"
                     })
             except Exception as e:
+                print(f"DEBUG: Error loading from S3: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 return json.dumps({
                     "error": f"Failed to load kubeconfig: {str(e)}",
                     "message": "Unable to connect to cluster"
                 })
         else:
+            print("DEBUG: No S3 client available")
             return json.dumps({
                 "error": "No S3 client available",
                 "message": "Configuration error"
             })
         
         # Create API instances
+        print("DEBUG: Creating API instances...")
         v1 = client.CoreV1Api()
         apps_v1 = client.AppsV1Api()
+        print("DEBUG: API instances created")
         
         # Get all resources
+        print("DEBUG: Fetching pods...")
         pods = v1.list_pod_for_all_namespaces(watch=False)
+        print(f"DEBUG: Pods fetched: {len(pods.items)}")
+        
+        print("DEBUG: Fetching PVCs...")
         pvcs = v1.list_persistent_volume_claim_for_all_namespaces(watch=False)
+        print(f"DEBUG: PVCs fetched: {len(pvcs.items)}")
+        
+        print("DEBUG: Fetching nodes...")
         nodes = v1.list_node(watch=False)
+        print(f"DEBUG: Nodes fetched: {len(nodes.items)}")
+        
+        print("DEBUG: Fetching deployments...")
         deployments = apps_v1.list_deployment_for_all_namespaces(watch=False)
+        print(f"DEBUG: Deployments fetched: {len(deployments.items)}")
         
         # Extract relevant data for response
         pods_data = []
