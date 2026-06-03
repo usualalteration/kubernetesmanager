@@ -2,6 +2,11 @@ import json
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 import yaml
+import requests
+import os
+
+OLLAMA_URL = os.environ.get('OLLAMA_URL', 'http://ollama:11434')
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama2')
 
 def main(args, ctx=None):
     query = args.get("query", "").lower().strip()
@@ -9,6 +14,8 @@ def main(args, ctx=None):
     print(f"DEBUG: ctx type: {type(ctx)}")
     print(f"DEBUG: ctx is None: {ctx is None}")
     print(f"DEBUG: ctx.S3_CLIENT: {ctx.S3_CLIENT if ctx else 'No ctx'}")
+    print(f"DEBUG: OLLAMA_URL: {OLLAMA_URL}")
+    print(f"DEBUG: OLLAMA_MODEL: {OLLAMA_MODEL}")
     
     if not query:
         return json.dumps({
@@ -123,6 +130,113 @@ def main(args, ctx=None):
                 "ready_replicas": deployment.status.ready_replicas if deployment.status else 0
             })
         
+        # Prepare context for LLM
+        cluster_context = {
+            "pods": pods_data,
+            "pvcs": pvcs_data,
+            "nodes": nodes_data,
+            "deployments": deployments_data
+        }
+        
+        # Call Ollama LLM
+        print("DEBUG: Calling Ollama LLM...")
+        try:
+            ollama_response = call_ollama(query, cluster_context)
+            print(f"DEBUG: Ollama response: {ollama_response}")
+            return json.dumps({
+                "response": ollama_response,
+                "source": "llm"
+            })
+        except Exception as e:
+            print(f"DEBUG: Ollama error: {str(e)}")
+            # Fall back to deterministic response
+            print("DEBUG: Falling back to deterministic response")
+            response = generate_response(query, pods_data, pvcs_data, nodes_data, deployments_data)
+            return json.dumps(response)
+        
+        return json.dumps(response)
+        
+    except ApiException as e:
+        print(f"DEBUG: Kubernetes API error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return json.dumps({
+            "error": f"Kubernetes API error: {str(e)}",
+            "message": "Failed to retrieve cluster data",
+            "details": str(e)
+        })
+    except Exception as e:
+        print(f"DEBUG: General error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return json.dumps({
+            "error": str(e),
+            "message": "An unexpected error occurred"
+        })
+
+def call_ollama(query, cluster_context):
+    """Call Ollama LLM with cluster context"""
+    # Prepare prompt with cluster context
+    context_str = json.dumps(cluster_context, indent=2)
+    
+    prompt = f"""You are a Kubernetes assistant. Here is the current state of the cluster:
+
+{context_str}
+
+The user asked: "{query}"
+
+Please provide a helpful and accurate response based on the cluster data above. Keep your response concise and focused on the user's question."""
+    
+    try:
+        response = requests.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model": OLLAMA_MODEL,
+                "prompt": prompt,
+                "stream": False
+            },
+            timeout=60
+        )
+        response.raise_for_status()
+        result = response.json()
+        return result.get('response', 'No response from LLM')
+    except requests.exceptions.RequestException as e:
+        print(f"DEBUG: Ollama request failed: {str(e)}")
+        raise Exception(f"Failed to connect to Ollama: {str(e)}")
+        
+        pvcs_data = []
+        for pvc in pvcs.items:
+            pvcs_data.append({
+                "name": pvc.metadata.name,
+                "namespace": pvc.metadata.namespace,
+                "status": pvc.status.phase if hasattr(pvc, 'status') and pvc.status else 'Unknown',
+                "capacity": pvc.spec.resources.requests.get('storage') if hasattr(pvc, 'spec') and hasattr(pvc.spec, 'resources') and hasattr(pvc.spec.resources, 'requests') else None
+            })
+        
+        nodes_data = []
+        for node in nodes.items:
+            node_status = "Unknown"
+            if node.status and node.status.conditions:
+                for condition in node.status.conditions:
+                    if condition.type == "Ready":
+                        node_status = condition.status
+                        break
+            nodes_data.append({
+                "name": node.metadata.name,
+                "status": node_status,
+                "capacity": node.status.capacity if node.status and node.status.capacity else {},
+                "allocatable": node.status.allocatable if node.status and node.status.allocatable else {}
+            })
+        
+        deployments_data = []
+        for deployment in deployments.items:
+            deployments_data.append({
+                "name": deployment.metadata.name,
+                "namespace": deployment.metadata.namespace,
+                "replicas": deployment.status.replicas if deployment.status else 0,
+                "ready_replicas": deployment.status.ready_replicas if deployment.status else 0
+            })
+        
         # Generate response based on query
         response = generate_response(query, pods_data, pvcs_data, nodes_data, deployments_data)
         
@@ -135,6 +249,18 @@ def main(args, ctx=None):
             "details": str(e)
         })
     except Exception as e:
+        print(f"DEBUG: Kubernetes API error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return json.dumps({
+            "error": f"Kubernetes API error: {str(e)}",
+            "message": "Failed to retrieve cluster data",
+            "details": str(e)
+        })
+    except Exception as e:
+        print(f"DEBUG: General error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return json.dumps({
             "error": str(e),
             "message": "An unexpected error occurred"
