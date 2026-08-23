@@ -73,12 +73,3 @@ filename and cluster/user counts as metadata; the actions load the newest one
 into the Kubernetes client in memory. The chat calls an **Ollama** endpoint,
 configured through `OLLAMA_URL` and `OLLAMA_MODEL`.
 
-## Getting started
-
-```bash
-npm install
-npm run dev
-```
-
-The backend needs S3 configured for kubeconfig storage, and an Ollama endpoint
-for the chat. Upload a kubeconfig from the home page, then open the dashboard.
