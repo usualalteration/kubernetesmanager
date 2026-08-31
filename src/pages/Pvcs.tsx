@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import PvcMonitor from "@/components/dashboard/PvcMonitor";
 import { NavLink } from "@/components/NavLink";
@@ -46,10 +46,6 @@ const Pvcs = () => {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle>PVC Monitor</CardTitle>
-            <CardDescription>Visualizza lo stato dei volumi persistenti</CardDescription>
-          </CardHeader>
           <CardContent>
             <PvcMonitor />
           </CardContent>

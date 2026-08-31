@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import PodMonitor from "@/components/dashboard/PodMonitor";
 import { NavLink } from "@/components/NavLink";
@@ -46,10 +46,6 @@ const Pods = () => {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Pod Monitor</CardTitle>
-            <CardDescription>Visualizza lo stato dei pod in tempo reale</CardDescription>
-          </CardHeader>
           <CardContent>
             <PodMonitor />
           </CardContent>

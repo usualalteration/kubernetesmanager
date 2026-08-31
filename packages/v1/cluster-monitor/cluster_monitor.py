@@ -1,7 +1,36 @@
 import os
 import json
+from datetime import datetime, timezone
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
+
+
+def calculate_age(created_at):
+    """Calculate a human-readable age string from a creation timestamp."""
+    if not created_at:
+        return "Unknown"
+    try:
+        ts = created_at.replace('Z', '+00:00')
+        if 'T' not in ts:
+            ts = ts.replace(' ', 'T')
+        created_time = datetime.fromisoformat(ts)
+        if created_time.tzinfo is None:
+            created_time = created_time.replace(tzinfo=timezone.utc)
+        diff = datetime.now(timezone.utc) - created_time
+        if diff.days > 0:
+            if diff.days >= 365:
+                return f"{diff.days // 365}y"
+            if diff.days >= 30:
+                return f"{diff.days // 30}mo"
+            return f"{diff.days}d"
+        if diff.seconds >= 3600:
+            return f"{diff.seconds // 3600}h"
+        if diff.seconds >= 60:
+            return f"{diff.seconds // 60}m"
+        return f"{diff.seconds}s"
+    except Exception as e:
+        print(f"DEBUG: Error calculating age: {e}")
+        return "Unknown"
 
 
 def main(args, ctx=None):
@@ -82,6 +111,12 @@ def main(args, ctx=None):
             if pod.spec and hasattr(pod.spec, 'node_name'):
                 node_name = str(pod.spec.node_name) if pod.spec.node_name else ""
             
+            # Extract creation timestamp and calculate age
+            pod_created_at = ""
+            if pod.metadata and hasattr(pod.metadata, 'creation_timestamp') and pod.metadata.creation_timestamp:
+                pod_created_at = str(pod.metadata.creation_timestamp)
+            pod_age = calculate_age(pod_created_at)
+            
             # Count pod statuses
             if pod_phase in pod_status_counts:
                 pod_status_counts[pod_phase] += 1
@@ -90,7 +125,8 @@ def main(args, ctx=None):
                 "name": str(pod.metadata.name) if pod.metadata and pod.metadata.name else "unknown",
                 "namespace": str(pod.metadata.namespace) if pod.metadata and pod.metadata.namespace else "default",
                 "status": pod_phase,
-                "node": node_name
+                "node": node_name,
+                "age": pod_age
             })
         
         # Process PVCs data - extract only what we need
@@ -120,6 +156,17 @@ def main(args, ctx=None):
             if pvc.spec and hasattr(pvc.spec, 'access_modes'):
                 access_modes = [str(mode) for mode in pvc.spec.access_modes] if pvc.spec.access_modes else []
             
+            # Extract storage class safely
+            storage_class = ""
+            if pvc.spec and hasattr(pvc.spec, 'storage_class_name') and pvc.spec.storage_class_name:
+                storage_class = str(pvc.spec.storage_class_name)
+            
+            # Extract creation timestamp and calculate age
+            pvc_created_at = ""
+            if pvc.metadata and hasattr(pvc.metadata, 'creation_timestamp') and pvc.metadata.creation_timestamp:
+                pvc_created_at = str(pvc.metadata.creation_timestamp)
+            pvc_age = calculate_age(pvc_created_at)
+            
             # Count PVC statuses
             if pvc_phase in pvc_status_counts:
                 pvc_status_counts[pvc_phase] += 1
@@ -130,6 +177,8 @@ def main(args, ctx=None):
                 "status": pvc_phase,
                 "capacity": capacity,
                 "access_modes": access_modes,
+                "storage_class": storage_class,
+                "age": pvc_age,
                 "volume_name": str(pvc.spec.volume_name) if pvc.spec and hasattr(pvc.spec, 'volume_name') and pvc.spec.volume_name else ""
             })
         

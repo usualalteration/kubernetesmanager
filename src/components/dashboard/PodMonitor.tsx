@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
@@ -67,7 +66,7 @@ const PodMonitor = () => {
             namespace: pod.namespace || 'default',
             status: pod.status || 'Unknown',
             restarts: 0, // We don't have restarts data in the API yet
-            age: 'N/A', // We don't have age data in the API yet
+            age: pod.age || 'N/A',
             node: pod.node || 'N/A'
           }));
           
@@ -111,111 +110,92 @@ const PodMonitor = () => {
 
   if (loading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Pod Monitoring</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center h-64">
-            <p>Loading pods data...</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center h-64">
+        <p>Loading pods data...</p>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Pod Monitoring</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center h-64 space-y-4">
-            <p className="text-red-500">Error: {error}</p>
-            <Button onClick={handleReload}>Reload with Verbose Logs</Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <p className="text-red-500">Error: {error}</p>
+        <Button onClick={handleReload}>Reload with Verbose Logs</Button>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Pod Monitoring</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="mb-4 flex items-center justify-between">
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold">Pods Overview</h3>
-            <p className="text-sm text-muted-foreground">
-              Total pods: {pods.length} | Running: {pods.filter(p => p.status === 'Running').length} | 
-              Pending: {pods.filter(p => p.status === 'Pending').length} | 
-              Failed: {pods.filter(p => p.status === 'Failed').length}
-            </p>
-          </div>
-          <div className="flex space-x-2">
-            <Button onClick={handleReload} variant="outline" size="sm">
-              🔄 Reload
-            </Button>
-            <select className="rounded-md border bg-background px-3 py-1 text-sm">
-              <option>All Namespaces</option>
-              <option>default</option>
-              <option>kube-system</option>
-              <option>production</option>
-              <option>monitoring</option>
-            </select>
-            <input 
-              type="text" 
-              placeholder="Search pods..." 
-              className="rounded-md border bg-background px-3 py-1 text-sm"
-            />
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h3 className="text-lg font-semibold">Pods Overview</h3>
+          <p className="text-sm text-muted-foreground">
+            Total pods: {pods.length} | Running: {pods.filter(p => p.status === 'Running').length} | 
+            Pending: {pods.filter(p => p.status === 'Pending').length} | 
+            Failed: {pods.filter(p => p.status === 'Failed').length}
+          </p>
+        </div>
+        <div className="flex space-x-2">
+          <Button onClick={handleReload} variant="outline" size="sm">
+            🔄 Reload
+          </Button>
+          <select className="rounded-md border bg-background px-3 py-1 text-sm">
+            <option>All Namespaces</option>
+            <option>default</option>
+            <option>kube-system</option>
+            <option>production</option>
+            <option>monitoring</option>
+          </select>
+          <input 
+            type="text" 
+            placeholder="Search pods..." 
+            className="rounded-md border bg-background px-3 py-1 text-sm"
+          />
+        </div>
+      </div>
+      
+      {/* Verbose Logs */}
+      {verboseLogs.length > 0 && (
+        <div className="rounded-md border bg-muted p-3">
+          <h4 className="mb-2 text-sm font-semibold">Verbose Logs:</h4>
+          <div className="max-h-32 overflow-y-auto space-y-1 text-xs font-mono">
+            {verboseLogs.map((log, idx) => (
+              <div key={idx} className="text-muted-foreground">{log}</div>
+            ))}
           </div>
         </div>
-        
-        {/* Verbose Logs */}
-        {verboseLogs.length > 0 && (
-          <div className="mb-4 rounded-md border bg-muted p-3">
-            <h4 className="mb-2 text-sm font-semibold">Verbose Logs:</h4>
-            <div className="max-h-32 overflow-y-auto space-y-1 text-xs font-mono">
-              {verboseLogs.map((log, idx) => (
-                <div key={idx} className="text-muted-foreground">{log}</div>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Namespace</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Node</TableHead>
-                <TableHead>Restarts</TableHead>
-                <TableHead>Age</TableHead>
+      )}
+      
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Namespace</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Node</TableHead>
+              <TableHead>Restarts</TableHead>
+              <TableHead>Age</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {pods.map((pod) => (
+              <TableRow key={pod.id}>
+                <TableCell className="font-medium">{pod.name}</TableCell>
+                <TableCell>{pod.namespace}</TableCell>
+                <TableCell>
+                  <Badge className={getStatusColor(pod.status)}>{pod.status}</Badge>
+                </TableCell>
+                <TableCell>{pod.node}</TableCell>
+                <TableCell>{pod.restarts}</TableCell>
+                <TableCell>{pod.age}</TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pods.map((pod) => (
-                <TableRow key={pod.id}>
-                  <TableCell className="font-medium">{pod.name}</TableCell>
-                  <TableCell>{pod.namespace}</TableCell>
-                  <TableCell>
-                    <Badge className={getStatusColor(pod.status)}>{pod.status}</Badge>
-                  </TableCell>
-                  <TableCell>{pod.node}</TableCell>
-                  <TableCell>{pod.restarts}</TableCell>
-                  <TableCell>{pod.age}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
   );
 };
 
