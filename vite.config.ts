@@ -24,6 +24,10 @@ export default defineConfig(({ mode }) => {
         "/api/my": {
           target: env.OPS_HOST || env.OPSDEV_HOST,
         changeOrigin: true
+      },
+        "/stream": {
+          target: env.OPS_HOST || env.OPSDEV_HOST,
+        changeOrigin: true
       }
     },
     host: "0.0.0.0",

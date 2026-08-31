@@ -1,14 +1,13 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import ChatInterface from "@/components/dashboard/ChatInterface";
 import { NavLink } from "@/components/NavLink";
 
 const Chat = () => {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b">
+      <header className="border-b shrink-0">
         <div className="container flex h-16 items-center justify-between px-4">
           <div className="flex items-center space-x-2">
             <h1 className="text-xl font-bold">Truk8s</h1>
@@ -31,30 +30,10 @@ const Chat = () => {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-3xl font-bold mb-2">AI Chat</h2>
-            <p className="text-muted-foreground">Interagisci con l'assistente AI per il tuo cluster</p>
-          </div>
-          <NavLink to="/">
-            <Button variant="outline">
-              ← Home
-            </Button>
-          </NavLink>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Chat Interface</CardTitle>
-            <CardDescription>Chiedi informazioni sul tuo cluster Kubernetes</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ChatInterface />
-          </CardContent>
-        </Card>
-      </main>
+      {/* Chat Interface - full height below header */}
+      <div className="flex-1 overflow-hidden">
+        <ChatInterface />
+      </div>
     </div>
   );
 };
