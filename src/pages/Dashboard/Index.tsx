@@ -110,6 +110,10 @@ const Dashboard = () => {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
+                  <p className="text-sm text-muted-foreground">
+                    Formati supportati: YAML (.yaml, .yml), JSON (.json), TXT e file senza estensione.
+                    Il file verrà validato come kubeconfig Kubernetes valido.
+                  </p>
                   {kubeconfigFile && (
                     <div className="flex items-center gap-2 rounded-md bg-muted p-2">
                       <span className="text-sm font-medium">File selezionato:</span>
@@ -124,7 +128,6 @@ const Dashboard = () => {
                       id="kubeconfig"
                       type="file"
                       className="col-span-3"
-                      accept=".yaml,.yml"
                       onChange={handleFileUpload}
                       disabled={isUploading}
                     />

@@ -44,13 +44,16 @@ const PodMonitor = () => {
         addLog(`Response status: ${response.status}`);
         const data = await response.json();
         
-        if (data.error) {
-          setError(data.error);
-          addLog(`Error received: ${data.error}`);
-          if (data.message) {
-            addLog(`Message: ${data.message}`);
+        // Handle both direct JSON and nested "body" format
+        const result = data.body || data;
+        
+        if (result.error) {
+          setError(result.error);
+          addLog(`Error received: ${result.error}`);
+          if (result.message) {
+            addLog(`Message: ${result.message}`);
           }
-          toast.error(data.error);
+          toast.error(result.error);
         } else {
           addLog('Success! Processing data...');
           addLog(`Pods count: ${data.pods?.items?.length || 0}`);

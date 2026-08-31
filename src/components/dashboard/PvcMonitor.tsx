@@ -33,8 +33,11 @@ const PvcMonitor = () => {
         const response = await fetch('/api/my/v1/cluster-monitor');
         const data = await response.json();
         
-        if (data.error) {
-          setError(data.error);
+        // Handle both direct JSON and nested "body" format
+        const result = data.body || data;
+        
+        if (result.error) {
+          setError(result.error);
         } else {
           // Process PVCs data to match expected format
           const processedPvcs: Pvc[] = data.pvcs.items.map((pvc: any) => ({

@@ -33,27 +33,7 @@ const Nodes = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-3xl font-bold mb-2">Nodes</h2>
-            <p className="text-muted-foreground">Monitora i nodi del cluster</p>
-          </div>
-          <NavLink to="/">
-            <Button variant="outline">
-              ← Home
-            </Button>
-          </NavLink>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Node Monitor</CardTitle>
-            <CardDescription>Visualizza lo stato e le risorse dei nodi</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <NodeMonitor />
-          </CardContent>
-        </Card>
+        <NodeMonitor />
       </main>
     </div>
   );

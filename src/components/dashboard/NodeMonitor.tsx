@@ -33,20 +33,31 @@ const NodeMonitor = () => {
         const response = await fetch('/api/my/v1/cluster-monitor');
         const data = await response.json();
         
-        if (data.error) {
-          setError(data.error);
+        // Handle both direct JSON and nested "body" format
+        const result = data.body || data;
+        
+        if (result.error) {
+          setError(result.error);
         } else {
           // Process nodes data to match expected format
-          const processedNodes: Node[] = data.nodes.items.map((node: any) => ({
-            id: node.name,
-            name: node.name,
-            status: node.status || 'Unknown',
-            role: node.labels && node.labels['node-role.kubernetes.io/control-plane'] ? 'master' : 'worker',
-            cpu: 'N/A', // We don't have cpu data in the API yet
-            memory: 'N/A', // We don't have memory data in the API yet
-            pods: 0, // We don't have pod count data in the API yet
-            age: 'N/A' // We don't have age data in the API yet
-          }));
+          const processedNodes: Node[] = result.nodes.items.map((node: any) => {
+            // Get node status from conditions
+            let nodeStatus = node.status || 'Unknown';
+            // Normalize status - "True" should be "Ready"
+            if (nodeStatus === 'True') {
+              nodeStatus = 'Ready';
+            }
+            return {
+              id: node.name,
+              name: node.name,
+              status: nodeStatus,
+              role: node.labels && node.labels['node-role.kubernetes.io/control-plane'] ? 'master' : 'worker',
+              cpu: node.allocatable?.cpu || node.capacity?.cpu || 'N/A',
+              memory: node.allocatable?.memory || node.capacity?.memory || 'N/A',
+              pods: node.pods_count || 0,
+              age: node.age || 'N/A'
+            };
+          });
           
           setNodes(processedNodes);
         }
@@ -62,7 +73,9 @@ const NodeMonitor = () => {
   }, []);
 
   const getStatusColor = (status: string) => {
-    switch (status) {
+    // Handle both "Ready" and "True" (from node conditions)
+    const normalizedStatus = status === "True" ? "Ready" : status;
+    switch (normalizedStatus) {
       case 'Ready':
         return 'bg-green-100 text-green-800';
       case 'NotReady':
