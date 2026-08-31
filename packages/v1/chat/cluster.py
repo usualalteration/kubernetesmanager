@@ -9,21 +9,58 @@ import yaml
 from kubernetes import client, config as k8s_config
 from kubernetes.client.rest import ApiException
 
+ACTIVE_MARKER = "kubeconfigs/.active"
 
-def load_kubeconfig(ctx):
-    """Load the most recent kubeconfig from S3. Returns the parsed dict or None."""
+
+def get_active_config(ctx):
+    """
+    Return (key, config_dict) of the active kubeconfig.
+    Reads .active marker; falls back to most recent by LastModified.
+    """
     if not ctx or not hasattr(ctx, "S3_CLIENT") or not ctx.S3_CLIENT:
-        return None
+        return None, None
+
+    # Try active marker first
+    active_key = ""
+    try:
+        marker = ctx.S3_CLIENT.get_object(Bucket=ctx.S3_DATA, Key=ACTIVE_MARKER)
+        active_key = marker["Body"].read().decode("utf-8").strip()
+    except Exception:
+        pass
+
+    if active_key:
+        try:
+            obj = ctx.S3_CLIENT.get_object(Bucket=ctx.S3_DATA, Key=active_key)
+            raw = obj["Body"].read().decode("utf-8")
+            config = yaml.safe_load(raw)
+            return active_key, config
+        except Exception:
+            pass
+
+    # Fallback: most recent
     try:
         response = ctx.S3_CLIENT.list_objects_v2(
             Bucket=ctx.S3_DATA, Prefix="kubeconfigs/"
         )
-        if "Contents" not in response or len(response["Contents"]) == 0:
-            return None
-        latest = max(response["Contents"], key=lambda x: x["LastModified"])
+        contents = [
+            o for o in response.get("Contents", []) if o["Key"] != ACTIVE_MARKER
+        ]
+        if not contents:
+            return None, None
+        latest = max(contents, key=lambda x: x["LastModified"])
         obj = ctx.S3_CLIENT.get_object(Bucket=ctx.S3_DATA, Key=latest["Key"])
         raw = obj["Body"].read().decode("utf-8")
-        return yaml.safe_load(raw)
+        config = yaml.safe_load(raw)
+        return latest["Key"], config
+    except Exception:
+        return None, None
+
+
+def load_kubeconfig(ctx):
+    """Load the active kubeconfig from S3. Returns the parsed dict or None."""
+    try:
+        key, config = get_active_config(ctx)
+        return config
     except Exception as e:
         print(f"cluster.load_kubeconfig error: {e}")
         return None

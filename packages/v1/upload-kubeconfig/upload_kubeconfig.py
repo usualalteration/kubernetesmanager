@@ -57,6 +57,16 @@ def main(args, ctx=None):
                         'users': str(len(config.get('users', [])))
                     }
                 )
+                # Set this as the active kubeconfig
+                try:
+                    ctx.S3_CLIENT.put_object(
+                        Bucket=ctx.S3_DATA,
+                        Key="kubeconfigs/.active",
+                        Body=unique_id.encode("utf-8"),
+                        ContentType="text/plain",
+                    )
+                except Exception:
+                    pass
                 return {
                     "success": True,
                     "message": "Kubeconfig saved successfully",
