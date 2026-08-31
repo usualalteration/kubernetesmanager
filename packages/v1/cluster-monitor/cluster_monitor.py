@@ -39,12 +39,23 @@ def main(args, ctx=None):
         if ctx and ctx.S3_CLIENT:
             try:
                 print("DEBUG: Listing kubeconfigs in S3...")
-                # List kubeconfigs in S3
+                # List kubeconfig files in S3, skipping the .active marker
                 response = ctx.S3_CLIENT.list_objects_v2(Bucket=ctx.S3_DATA, Prefix='kubeconfigs/')
                 if 'Contents' in response and len(response['Contents']) > 0:
-                    print(f"DEBUG: Found {len(response['Contents'])} kubeconfig(s)")
+                    print(f"DEBUG: Found {len(response['Contents'])} object(s) under kubeconfigs/")
+                    # Ignore the .active marker and any non-kubeconfig helper files
+                    kubeconfig_files = [
+                        item for item in response['Contents']
+                        if not item['Key'].endswith('.active')
+                        and not item['Key'].endswith('/')
+                    ]
+                    if not kubeconfig_files:
+                        return json.dumps({
+                            "error": "Invalid kube-config file. No configuration found.",
+                            "message": "No kubeconfig file found in storage"
+                        })
                     # Get the most recent kubeconfig
-                    latest_file = max(response['Contents'], key=lambda x: x['LastModified'])
+                    latest_file = max(kubeconfig_files, key=lambda x: x['LastModified'])
                     print(f"DEBUG: Loading kubeconfig: {latest_file['Key']}")
                     obj = ctx.S3_CLIENT.get_object(Bucket=ctx.S3_DATA, Key=latest_file['Key'])
                     kubeconfig_content = obj['Body'].read().decode('utf-8')
@@ -54,6 +65,11 @@ def main(args, ctx=None):
                     from kubernetes import config as k8s_config
                     import yaml
                     kubeconfig_dict = yaml.safe_load(kubeconfig_content)
+                    if not isinstance(kubeconfig_dict, dict):
+                        return json.dumps({
+                            "error": "Invalid kube-config file. No configuration found.",
+                            "message": "Stored kubeconfig is not a valid YAML mapping"
+                        })
                     print(f"DEBUG: Kubeconfig parsed, clusters: {len(kubeconfig_dict.get('clusters', []))}")
                     k8s_config.load_kube_config_from_dict(kubeconfig_dict)
                 else:
