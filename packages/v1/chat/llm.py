@@ -80,8 +80,12 @@ class LLM:
         host = args.get("STREAM_HOST", "")
         port = int(args.get("STREAM_PORT") or "0")
         if host and port:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect((host,port))
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect((host, port))
+            except Exception as e:
+                print(f"stream socket connect failed: {e}")
+                sock = None
         try:
             for line in lines:
                 if sock is not None:
@@ -91,8 +95,20 @@ class LLM:
         except Exception as e:
             print(e)
             print("interrupted")
-        if sock is not None:
-            sock.close()
+            # Never fail silently: surface the error to the client
+            err_line = f"\n[LLM error: {e}]"
+            try:
+                if sock is not None:
+                    sock.sendall(json.dumps(err_line).encode("utf-8"))
+            except Exception as send_err:
+                print(f"stream error send failed: {send_err}")
+            out += err_line
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
         return out
 
     def _ask(self, inp):
