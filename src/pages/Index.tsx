@@ -37,7 +37,8 @@ const Index = () => {
             Kubernetes Cluster Management
           </h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Visualizza, monitora e gestisci il tuo cluster Kubernetes con un'interfaccia intuitiva e potente.
+            View, monitor and manage your Kubernetes cluster with an
+            intuitive and powerful interface.
           </p>
         </div>
       </section>
@@ -49,7 +50,7 @@ const Index = () => {
             <CardHeader>
               <div className="text-4xl mb-2">📦</div>
               <CardTitle>Pods</CardTitle>
-              <CardDescription>Monitora i pod del cluster</CardDescription>
+              <CardDescription>Monitor cluster pods</CardDescription>
             </CardHeader>
             <CardContent>
               <NavLink to="/pods">
@@ -63,7 +64,7 @@ const Index = () => {
             <CardHeader>
               <div className="text-4xl mb-2">💾</div>
               <CardTitle>PVCs</CardTitle>
-              <CardDescription>Storage e volume claims</CardDescription>
+              <CardDescription>Storage and volume claims</CardDescription>
             </CardHeader>
             <CardContent>
               <NavLink to="/pvcs">
@@ -77,7 +78,7 @@ const Index = () => {
             <CardHeader>
               <div className="text-4xl mb-2">🖥️</div>
               <CardTitle>Nodes</CardTitle>
-              <CardDescription>Nodi e risorse</CardDescription>
+              <CardDescription>Nodes and resources</CardDescription>
             </CardHeader>
             <CardContent>
               <NavLink to="/nodes">

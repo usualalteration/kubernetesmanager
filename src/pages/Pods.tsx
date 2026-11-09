@@ -14,7 +14,7 @@ const Pods = () => {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-3xl font-bold mb-2">Pods</h2>
-            <p className="text-muted-foreground">Monitora i pod del cluster Kubernetes</p>
+            <p className="text-muted-foreground">Monitor pods in the Kubernetes cluster</p>
           </div>
           <NavLink to="/">
             <Button variant="outline">

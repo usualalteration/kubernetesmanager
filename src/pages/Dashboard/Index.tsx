@@ -67,19 +67,19 @@ const Dashboard = () => {
         });
         
         const result = await response.json();
-        alert("Risultato: " + JSON.stringify(result, null, 2));
+        alert("Result: " + JSON.stringify(result, null, 2));
         console.log("Kubeconfig validation result:", result);
         console.log("File name:", file.name);
         console.log("File size:", file.size);
         
         if (result.valid) {
-          toast.success(`Kubeconfig "${file.name}" caricato con successo!`);
+          toast.success(`Kubeconfig "${file.name}" uploaded successfully!`);
           setIsDialogOpen(false);
         } else {
-          toast.error(result.error || "Errore nel file kubeconfig");
+          toast.error(result.error || "Error in kubeconfig file");
         }
       } catch (error) {
-        toast.error("Errore durante il caricamento del file");
+        toast.error("Error while uploading the file");
         console.error(error);
       } finally {
         setIsUploading(false);
@@ -111,12 +111,13 @@ const Dashboard = () => {
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <p className="text-sm text-muted-foreground">
-                    Formati supportati: YAML (.yaml, .yml), JSON (.json), TXT e file senza estensione.
-                    Il file verrà validato come kubeconfig Kubernetes valido.
+                    Supported formats: YAML (.yaml, .yml), JSON (.json), TXT and files
+                    without an extension. The file will be validated as a valid
+                    Kubernetes kubeconfig.
                   </p>
                   {kubeconfigFile && (
                     <div className="flex items-center gap-2 rounded-md bg-muted p-2">
-                      <span className="text-sm font-medium">File selezionato:</span>
+                      <span className="text-sm font-medium">Selected file:</span>
                       <span className="text-sm text-muted-foreground">{kubeconfigFile.name}</span>
                     </div>
                   )}
@@ -136,7 +137,7 @@ const Dashboard = () => {
                 {kubeconfigFile && (
                   <div className="text-sm text-muted-foreground">
                     <p>File: <span className="font-medium">{kubeconfigFile.name}</span></p>
-                    <p>Dimensione: {(kubeconfigFile.size / 1024).toFixed(2)} KB</p>
+                    <p>Size: {(kubeconfigFile.size / 1024).toFixed(2)} KB</p>
                   </div>
                 )}
               </DialogContent>

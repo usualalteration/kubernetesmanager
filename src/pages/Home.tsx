@@ -58,15 +58,15 @@ const Home = () => {
         const result = await response.json();
 
         if (result.valid) {
-          toast.success(`Kubeconfig "${file.name}" caricato con successo!`);
+          toast.success(`Kubeconfig "${file.name}" uploaded successfully!`);
           setIsDialogOpen(false);
           setKubeconfigFile(null);
           refresh();
         } else {
-          toast.error(result.error || "Errore nel file kubeconfig");
+          toast.error(result.error || "Error in kubeconfig file");
         }
       } catch (error) {
-        toast.error("Errore durante il caricamento del file");
+        toast.error("Error while uploading the file");
         console.error(error);
       } finally {
         setIsUploading(false);
@@ -79,24 +79,24 @@ const Home = () => {
     const ok = await deleteConfig(key);
     setDeletingKey(null);
     if (ok) {
-      toast.success(`Kubeconfig "${filename}" rimosso`);
+      toast.success(`Kubeconfig "${filename}" removed`);
     } else {
-      toast.error(`Errore nella rimozione di "${filename}"`);
+      toast.error(`Error removing "${filename}"`);
     }
   };
 
   const handleSetActive = async (key: string, filename: string) => {
     const ok = await setActive(key);
     if (ok) {
-      toast.success(`"${filename}" impostato come kubeconfig attivo`);
+      toast.success(`"${filename}" set as the active kubeconfig`);
     } else {
-      toast.error(`Errore nell'attivazione di "${filename}"`);
+      toast.error(`Error activating "${filename}"`);
     }
   };
 
   const formatDate = (iso: string) => {
     try {
-      return new Date(iso).toLocaleString("it-IT", {
+      return new Date(iso).toLocaleString("en-US", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
@@ -119,8 +119,8 @@ const Home = () => {
             <div className="flex items-center gap-2">
               <span className="text-amber-600 dark:text-amber-400">⚠️</span>
               <p className="text-sm text-amber-800 dark:text-amber-200">
-                Nessun kubeconfig caricato. Carica un file kubeconfig per
-                accedere alle funzionalità del cluster.
+                No kubeconfig uploaded. Upload a kubeconfig file to access
+                cluster features.
               </p>
             </div>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -144,14 +144,14 @@ const Home = () => {
             Kubernetes Cluster Management
           </h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Visualizza, monitora e gestisci il tuo cluster Kubernetes con
-            un'interfaccia intuitiva e potente.
+            View, monitor and manage your Kubernetes cluster with an
+            intuitive and powerful interface.
           </p>
           {configured && activeInfo && (
             <div className="inline-flex items-center gap-2 rounded-lg bg-green-50 dark:bg-green-950/30 px-4 py-2 border border-green-200 dark:border-green-900">
               <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
               <span className="text-sm text-green-800 dark:text-green-200">
-                Cluster connesso:{" "}
+                Connected cluster:{" "}
                 <strong>{activeInfo.current_context || "default"}</strong>
                 {" "}({activeInfo.clusters} cluster
                 {activeInfo.clusters !== 1 ? "s" : ""},{" "}
@@ -171,12 +171,12 @@ const Home = () => {
               <div>
                 <CardTitle>Kubeconfig</CardTitle>
                 <CardDescription>
-                  Gestisci i file kubeconfig del cluster
+                  Manage cluster kubeconfig files
                 </CardDescription>
               </div>
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm">+ Aggiungi</Button>
+                  <Button size="sm">+ Add</Button>
                 </DialogTrigger>
                 <UploadDialog
                   kubeconfigFile={kubeconfigFile}
@@ -189,8 +189,7 @@ const Home = () => {
           <CardContent>
             {items.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                Nessun kubeconfig caricato. Clicca "Aggiungi" per caricarne
-                uno.
+                No kubeconfig uploaded. Click "Add" to upload one.
               </p>
             ) : (
               <div className="space-y-2">
@@ -213,7 +212,7 @@ const Home = () => {
                           {item.active && (
                             <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-green-600 px-2 py-0.5 text-xs font-medium text-white">
                               <span className="inline-block h-1.5 w-1.5 rounded-full bg-white" />
-                              Attivo
+                              Active
                             </span>
                           )}
                         </div>
@@ -233,7 +232,7 @@ const Home = () => {
                             handleSetActive(item.key, item.filename)
                           }
                         >
-                          Imposta attivo
+                          Set Active
                         </Button>
                       )}
                       <Button
@@ -244,7 +243,7 @@ const Home = () => {
                           handleDelete(item.key, item.filename)
                         }
                       >
-                        {deletingKey === item.key ? "…" : "Elimina"}
+                        {deletingKey === item.key ? "…" : "Delete"}
                       </Button>
                     </div>
                   </div>
@@ -262,7 +261,7 @@ const Home = () => {
             <CardHeader>
               <div className="text-4xl mb-2">📦</div>
               <CardTitle>Pods</CardTitle>
-              <CardDescription>Monitora i pod del cluster</CardDescription>
+              <CardDescription>Monitor cluster pods</CardDescription>
             </CardHeader>
             <CardContent>
               <NavLink to="/pods">
@@ -276,7 +275,7 @@ const Home = () => {
             <CardHeader>
               <div className="text-4xl mb-2">💾</div>
               <CardTitle>PVCs</CardTitle>
-              <CardDescription>Storage e volume claims</CardDescription>
+              <CardDescription>Storage and volume claims</CardDescription>
             </CardHeader>
             <CardContent>
               <NavLink to="/pvcs">
@@ -290,7 +289,7 @@ const Home = () => {
             <CardHeader>
               <div className="text-4xl mb-2">🖥️</div>
               <CardTitle>Nodes</CardTitle>
-              <CardDescription>Nodi e risorse</CardDescription>
+              <CardDescription>Nodes and resources</CardDescription>
             </CardHeader>
             <CardContent>
               <NavLink to="/nodes">
@@ -341,18 +340,18 @@ const UploadDialog = ({
     <DialogHeader>
       <DialogTitle>Upload Kubeconfig File</DialogTitle>
       <DialogDescription>
-        Carica un file kubeconfig per connetterti al cluster Kubernetes.
+        Upload a kubeconfig file to connect to your Kubernetes cluster.
       </DialogDescription>
     </DialogHeader>
     <div className="grid gap-4 py-4">
       <p className="text-sm text-muted-foreground">
-        Formati supportati: YAML (.yaml, .yml), JSON (.json), TXT e file senza
-        estensione. Il file verrà validato come kubeconfig Kubernetes valido e
-        impostato come configurazione attiva.
+        Supported formats: YAML (.yaml, .yml), JSON (.json), TXT and files
+        without an extension. The file will be validated as a valid Kubernetes
+        kubeconfig and set as the active configuration.
       </p>
       {kubeconfigFile && (
         <div className="flex items-center gap-2 rounded-md bg-muted p-2">
-          <span className="text-sm font-medium">File selezionato:</span>
+          <span className="text-sm font-medium">Selected file:</span>
           <span className="text-sm text-muted-foreground">
             {kubeconfigFile.name}
           </span>
@@ -377,7 +376,7 @@ const UploadDialog = ({
         <p>
           File: <span className="font-medium">{kubeconfigFile.name}</span>
         </p>
-        <p>Dimensione: {(kubeconfigFile.size / 1024).toFixed(2)} KB</p>
+        <p>Size: {(kubeconfigFile.size / 1024).toFixed(2)} KB</p>
       </div>
     )}
   </DialogContent>
