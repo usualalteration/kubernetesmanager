@@ -1,0 +1,4 @@
+{
+  "server_override": "https://192.168.5.2:6550",
+  "note": "The stored kubeconfig points at https://127.0.0.1:6550 (the k3d 'trutestcluster' API on the machine where it was created), which is unreachable from serverless actions. The same API server is reachable from this cluster at the host-side address 192.168.5.2. The certificate chain is still verified against the kubeconfig CA; only hostname matching is relaxed. If the host IP changes, update server_override and redeploy. (redeploy 2026-11-09: settings file included in action zip)"
+}

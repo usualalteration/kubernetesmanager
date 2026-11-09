@@ -1,8 +1,7 @@
-import os
 import json
 from datetime import datetime, timezone
-from kubernetes import client, config
-from kubernetes.client.rest import ApiException
+
+import k8sapi
 
 
 def calculate_age(created_at):
@@ -10,7 +9,7 @@ def calculate_age(created_at):
     if not created_at:
         return "Unknown"
     try:
-        ts = created_at.replace('Z', '+00:00')
+        ts = str(created_at).replace('Z', '+00:00')
         if 'T' not in ts:
             ts = ts.replace(' ', 'T')
         created_time = datetime.fromisoformat(ts)
@@ -33,80 +32,55 @@ def calculate_age(created_at):
         return "Unknown"
 
 
+def _metadata(item):
+    meta = item.get("metadata") if isinstance(item, dict) else None
+    return meta if isinstance(meta, dict) else {}
+
+
+def _status(item):
+    status = item.get("status") if isinstance(item, dict) else None
+    return status if isinstance(status, dict) else {}
+
+
+def _spec(item):
+    spec = item.get("spec") if isinstance(item, dict) else None
+    return spec if isinstance(spec, dict) else {}
+
+
 def main(args, ctx=None):
     try:
-        # Load kubeconfig from S3
-        if ctx and ctx.S3_CLIENT:
-            try:
-                print("DEBUG: Listing kubeconfigs in S3...")
-                # List kubeconfig files in S3, skipping the .active marker
-                response = ctx.S3_CLIENT.list_objects_v2(Bucket=ctx.S3_DATA, Prefix='kubeconfigs/')
-                if 'Contents' in response and len(response['Contents']) > 0:
-                    print(f"DEBUG: Found {len(response['Contents'])} object(s) under kubeconfigs/")
-                    # Ignore the .active marker and any non-kubeconfig helper files
-                    kubeconfig_files = [
-                        item for item in response['Contents']
-                        if not item['Key'].endswith('.active')
-                        and not item['Key'].endswith('/')
-                    ]
-                    if not kubeconfig_files:
-                        return json.dumps({
-                            "error": "Invalid kube-config file. No configuration found.",
-                            "message": "No kubeconfig file found in storage"
-                        })
-                    # Get the most recent kubeconfig
-                    latest_file = max(kubeconfig_files, key=lambda x: x['LastModified'])
-                    print(f"DEBUG: Loading kubeconfig: {latest_file['Key']}")
-                    obj = ctx.S3_CLIENT.get_object(Bucket=ctx.S3_DATA, Key=latest_file['Key'])
-                    kubeconfig_content = obj['Body'].read().decode('utf-8')
-                    print(f"DEBUG: Kubeconfig loaded, length: {len(kubeconfig_content)}")
-                    
-                    # Load from memory using load_kube_config_from_dict
-                    from kubernetes import config as k8s_config
-                    import yaml
-                    kubeconfig_dict = yaml.safe_load(kubeconfig_content)
-                    if not isinstance(kubeconfig_dict, dict):
-                        return json.dumps({
-                            "error": "Invalid kube-config file. No configuration found.",
-                            "message": "Stored kubeconfig is not a valid YAML mapping"
-                        })
-                    print(f"DEBUG: Kubeconfig parsed, clusters: {len(kubeconfig_dict.get('clusters', []))}")
-                    k8s_config.load_kube_config_from_dict(kubeconfig_dict)
-                else:
-                    return json.dumps({
-                        "error": "Invalid kube-config file. No configuration found.",
-                        "message": "No kubeconfig file found in storage"
-                    })
-            except Exception as e:
-                print(f"DEBUG: Error loading from S3: {str(e)}")
-                return json.dumps({
-                    "error": f"Failed to load kubeconfig from S3: {str(e)}",
-                    "message": "Please upload a valid kubeconfig file first"
-                })
-        else:
-            print("DEBUG: No S3 client available")
-            # Try to load from default location
-            try:
-                config.load_kube_config()
-            except Exception as e:
-                return json.dumps({
-                    "error": "Invalid kube-config file. No configuration found.",
-                    "message": f"No kubeconfig available: {str(e)}"
-                })
-        
-        # Create API instances
-        v1 = client.CoreV1Api()
-        apps_v1 = client.AppsV1Api()
-        
-        # Get pods
-        pods = v1.list_pod_for_all_namespaces(watch=False)
-        
-        # Get PVCs
-        pvcs = v1.list_persistent_volume_claim_for_all_namespaces(watch=False)
-        
-        # Get nodes
-        nodes = v1.list_node(watch=False)
-        
+        # Load kubeconfig from S3 (active marker, then most recent)
+        key, kubeconfig_dict, load_error = k8sapi.load_kubeconfig_from_s3(ctx)
+        if not key or not isinstance(kubeconfig_dict, dict):
+            message = "No kubeconfig file found in storage"
+            if load_error:
+                message = f"No kubeconfig file found in storage: {load_error}"
+            return {
+                "error": "Invalid kube-config file. No configuration found.",
+                "message": message
+            }
+        print(f"DEBUG: Loading kubeconfig: {key}")
+
+        try:
+            k8s = k8sapi.K8sClient(kubeconfig_dict)
+        except k8sapi.KubeConfigError as e:
+            return {
+                "error": "Invalid kube-config file. No configuration found.",
+                "message": str(e)
+            }
+
+        # Fetch all resources (plain JSON dicts, no kubernetes client)
+        try:
+            pods = k8s.list_all("/api/v1/pods")
+            pvcs = k8s.list_all("/api/v1/persistentvolumeclaims")
+            nodes = k8s.list_all("/api/v1/nodes")
+        except k8sapi.KubeApiError as e:
+            return {
+                "error": f"Kubernetes API error: {e}",
+                "message": "Failed to retrieve Kubernetes cluster data",
+                "hint": "Make sure you have a valid kubeconfig file and permissions to access the cluster resources."
+            }
+
         # Process pods data - extract only what we need
         pods_data = []
         pod_status_counts = {
@@ -115,36 +89,28 @@ def main(args, ctx=None):
             "Failed": 0,
             "Succeeded": 0
         }
-        
-        for pod in pods.items:
-            # Extract pod status phase safely
-            pod_phase = "Unknown"
-            if pod.status and hasattr(pod.status, 'phase'):
-                pod_phase = str(pod.status.phase)
-            
-            # Extract node name safely
-            node_name = ""
-            if pod.spec and hasattr(pod.spec, 'node_name'):
-                node_name = str(pod.spec.node_name) if pod.spec.node_name else ""
-            
-            # Extract creation timestamp and calculate age
-            pod_created_at = ""
-            if pod.metadata and hasattr(pod.metadata, 'creation_timestamp') and pod.metadata.creation_timestamp:
-                pod_created_at = str(pod.metadata.creation_timestamp)
+
+        for pod in pods:
+            pod_meta = _metadata(pod)
+            pod_status = _status(pod)
+            pod_spec = _spec(pod)
+
+            pod_phase = str(pod_status.get("phase") or "Unknown")
+            node_name = str(pod_spec.get("nodeName") or "")
+            pod_created_at = str(pod_meta.get("creationTimestamp") or "")
             pod_age = calculate_age(pod_created_at)
-            
-            # Count pod statuses
+
             if pod_phase in pod_status_counts:
                 pod_status_counts[pod_phase] += 1
-            
+
             pods_data.append({
-                "name": str(pod.metadata.name) if pod.metadata and pod.metadata.name else "unknown",
-                "namespace": str(pod.metadata.namespace) if pod.metadata and pod.metadata.namespace else "default",
+                "name": str(pod_meta.get("name") or "unknown"),
+                "namespace": str(pod_meta.get("namespace") or "default"),
                 "status": pod_phase,
                 "node": node_name,
                 "age": pod_age
             })
-        
+
         # Process PVCs data - extract only what we need
         pvcs_data = []
         pvc_status_counts = {
@@ -152,52 +118,40 @@ def main(args, ctx=None):
             "Pending": 0,
             "Lost": 0
         }
-        
-        for pvc in pvcs.items:
-            # Extract PVC status phase safely
-            pvc_phase = "Unknown"
-            if pvc.status and hasattr(pvc.status, 'phase'):
-                pvc_phase = str(pvc.status.phase)
-            
-            # Extract capacity safely
-            capacity = "N/A"
-            if pvc.spec and hasattr(pvc.spec, 'resources') and hasattr(pvc.spec.resources, 'requests'):
-                if hasattr(pvc.spec.resources.requests, 'get'):
-                    storage = pvc.spec.resources.requests.get('storage')
-                    if storage:
-                        capacity = str(storage)
-            
-            # Extract access modes safely
-            access_modes = []
-            if pvc.spec and hasattr(pvc.spec, 'access_modes'):
-                access_modes = [str(mode) for mode in pvc.spec.access_modes] if pvc.spec.access_modes else []
-            
-            # Extract storage class safely
-            storage_class = ""
-            if pvc.spec and hasattr(pvc.spec, 'storage_class_name') and pvc.spec.storage_class_name:
-                storage_class = str(pvc.spec.storage_class_name)
-            
-            # Extract creation timestamp and calculate age
-            pvc_created_at = ""
-            if pvc.metadata and hasattr(pvc.metadata, 'creation_timestamp') and pvc.metadata.creation_timestamp:
-                pvc_created_at = str(pvc.metadata.creation_timestamp)
+
+        for pvc in pvcs:
+            pvc_meta = _metadata(pvc)
+            pvc_status = _status(pvc)
+            pvc_spec = _spec(pvc)
+
+            pvc_phase = str(pvc_status.get("phase") or "Unknown")
+
+            requests_ = pvc_spec.get("resources", {})
+            requests_ = requests_.get("requests", {}) if isinstance(requests_, dict) else {}
+            storage = requests_.get("storage") if isinstance(requests_, dict) else None
+            capacity = str(storage) if storage else "N/A"
+
+            access_modes_raw = pvc_spec.get("accessModes") or []
+            access_modes = [str(mode) for mode in access_modes_raw] if isinstance(access_modes_raw, list) else []
+
+            storage_class = str(pvc_spec.get("storageClassName") or "")
+            pvc_created_at = str(pvc_meta.get("creationTimestamp") or "")
             pvc_age = calculate_age(pvc_created_at)
-            
-            # Count PVC statuses
+
             if pvc_phase in pvc_status_counts:
                 pvc_status_counts[pvc_phase] += 1
-            
+
             pvcs_data.append({
-                "name": str(pvc.metadata.name) if pvc.metadata and pvc.metadata.name else "unknown",
-                "namespace": str(pvc.metadata.namespace) if pvc.metadata and pvc.metadata.namespace else "default",
+                "name": str(pvc_meta.get("name") or "unknown"),
+                "namespace": str(pvc_meta.get("namespace") or "default"),
                 "status": pvc_phase,
                 "capacity": capacity,
                 "access_modes": access_modes,
                 "storage_class": storage_class,
                 "age": pvc_age,
-                "volume_name": str(pvc.spec.volume_name) if pvc.spec and hasattr(pvc.spec, 'volume_name') and pvc.spec.volume_name else ""
+                "volume_name": str(pvc_spec.get("volumeName") or "")
             })
-        
+
         # Process nodes data - extract only what we need
         nodes_data = []
         node_status_counts = {
@@ -205,127 +159,69 @@ def main(args, ctx=None):
             "NotReady": 0,
             "SchedulingDisabled": 0
         }
-        
+
         # Pre-calculate pods per node
         pods_per_node = {}
-        for pod in pods.items:
-            if pod.spec and hasattr(pod.spec, 'node_name') and pod.spec.node_name:
-                node_name = str(pod.spec.node_name)
+        for pod in pods:
+            node_name = str(_spec(pod).get("nodeName") or "")
+            if node_name:
                 pods_per_node[node_name] = pods_per_node.get(node_name, 0) + 1
-        
-        for node in nodes.items:
+
+        for node in nodes:
+            node_meta = _metadata(node)
+            node_status = _status(node)
+
             # Get node status from conditions
-            node_status = "Unknown"
+            node_state = "Unknown"
             conditions_list = []
-            if node.status and hasattr(node.status, 'conditions') and node.status.conditions:
-                for condition in node.status.conditions:
-                    conditions_list.append({
-                        "type": str(condition.type) if condition.type else "",
-                        "status": str(condition.status) if condition.status else "",
-                        "reason": str(condition.reason) if condition.reason else "",
-                        "message": str(condition.message) if condition.message else ""
-                    })
-                    if condition.type == "Ready" and condition.status == "True":
-                        node_status = "Ready"
-            
-            # Get labels safely
-            labels = {}
-            if node.metadata and hasattr(node.metadata, 'labels') and node.metadata.labels:
-                labels = {str(k): str(v) for k, v in node.metadata.labels.items()}
-            
-            # Extract allocatable resources safely
-            allocatable = {}
-            if node.status and hasattr(node.status, 'allocatable') and node.status.allocatable:
-                allocatable = {str(k): str(v) for k, v in node.status.allocatable.items()}
-            
-            # Extract capacity safely
-            capacity = {}
-            if node.status and hasattr(node.status, 'capacity') and node.status.capacity:
-                capacity = {str(k): str(v) for k, v in node.status.capacity.items()}
-            
-            # Count node statuses
-            if node_status in node_status_counts:
-                node_status_counts[node_status] += 1
-            
-            # Extract creation timestamp safely
-            created_at = ""
-            if node.metadata and hasattr(node.metadata, 'creation_timestamp'):
-                created_at = str(node.metadata.creation_timestamp) if node.metadata.creation_timestamp else ""
-            
-            # Calculate age
-            age = "Unknown"
-            if created_at and 'T' in created_at:
-                try:
-                    from datetime import datetime, timezone
-                    # Parse ISO format timestamp
-                    ts = created_at.replace('Z', '+00:00')
-                    created_time = datetime.fromisoformat(ts)
-                    if created_time.tzinfo is None:
-                        created_time = created_time.replace(tzinfo=timezone.utc)
-                    
-                    now = datetime.now(timezone.utc)
-                    diff = now - created_time
-                    
-                    if diff.days > 0:
-                        if diff.days >= 365:
-                            age = f"{diff.days // 365}y"
-                        elif diff.days >= 30:
-                            age = f"{diff.days // 30}mo"
-                        else:
-                            age = f"{diff.days}d"
-                    elif diff.seconds >= 3600:
-                        age = f"{diff.seconds // 3600}h"
-                    elif diff.seconds >= 60:
-                        age = f"{diff.seconds // 60}m"
-                    else:
-                        age = f"{diff.seconds}s"
-                except Exception as e:
-                    print(f"DEBUG: Error calculating age: {e}")
-            elif created_at:
-                # Try alternative formats (e.g., "2026-08-23 21:05:41+00:00")
-                try:
-                    from datetime import datetime, timezone
-                    # Handle "YYYY-MM-DD HH:MM:SS+00:00" format
-                    ts = created_at.replace(' ', 'T')
-                    if '+' not in ts and '-' not in ts[10:]:
-                        ts = ts + '+00:00'
-                    created_time = datetime.fromisoformat(ts)
-                    if created_time.tzinfo is None:
-                        created_time = created_time.replace(tzinfo=timezone.utc)
-                    
-                    now = datetime.now(timezone.utc)
-                    diff = now - created_time
-                    
-                    if diff.days > 0:
-                        if diff.days >= 365:
-                            age = f"{diff.days // 365}y"
-                        elif diff.days >= 30:
-                            age = f"{diff.days // 30}mo"
-                        else:
-                            age = f"{diff.days}d"
-                    elif diff.seconds >= 3600:
-                        age = f"{diff.seconds // 3600}h"
-                    elif diff.seconds >= 60:
-                        age = f"{diff.seconds // 60}m"
-                    else:
-                        age = f"{diff.seconds}s"
-                except Exception as e:
-                    print(f"DEBUG: Error calculating age (alt format): {e}")
-            
+            conditions_raw = node_status.get("conditions") or []
+            for condition in conditions_raw if isinstance(conditions_raw, list) else []:
+                if not isinstance(condition, dict):
+                    continue
+                cond_type = str(condition.get("type") or "")
+                cond_status = str(condition.get("status") or "")
+                conditions_list.append({
+                    "type": cond_type,
+                    "status": cond_status,
+                    "reason": str(condition.get("reason") or ""),
+                    "message": str(condition.get("message") or "")
+                })
+                if cond_type == "Ready":
+                    node_state = "Ready" if cond_status == "True" else "NotReady"
+                if cond_type == "SchedulingDisabled" and cond_status == "True":
+                    node_status_counts["SchedulingDisabled"] += 1
+
+            if node_state in node_status_counts:
+                node_status_counts[node_state] += 1
+
+            # Labels
+            labels_raw = node_meta.get("labels") or {}
+            labels = {str(k): str(v) for k, v in labels_raw.items()} if isinstance(labels_raw, dict) else {}
+
+            # Allocatable and capacity resources
+            allocatable_raw = node_status.get("allocatable") or {}
+            allocatable = {str(k): str(v) for k, v in allocatable_raw.items()} if isinstance(allocatable_raw, dict) else {}
+
+            capacity_raw = node_status.get("capacity") or {}
+            capacity = {str(k): str(v) for k, v in capacity_raw.items()} if isinstance(capacity_raw, dict) else {}
+
+            node_name = str(node_meta.get("name") or "unknown")
+            created_at = str(node_meta.get("creationTimestamp") or "")
+
             nodes_data.append({
-                "name": str(node.metadata.name) if node.metadata and node.metadata.name else "unknown",
-                "status": node_status,
+                "name": node_name,
+                "status": node_state,
                 "conditions": conditions_list,
                 "allocatable": allocatable,
                 "capacity": capacity,
                 "labels": labels,
-                "pods_count": pods_per_node.get(str(node.metadata.name), 0) if node.metadata and node.metadata.name else 0,
+                "pods_count": pods_per_node.get(node_name, 0),
                 "created_at": created_at,
-                "age": age
+                "age": calculate_age(created_at)
             })
-        
-        # Process data
+
         result = {
+            "version": "2.0-stdlib",
             "pods": {
                 "items": pods_data,
                 "summary": pod_status_counts
@@ -338,21 +234,28 @@ def main(args, ctx=None):
                 "items": nodes_data,
                 "summary": node_status_counts
             },
-            "timestamp": "2026-06-03T12:00:00Z",
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "message": "Kubernetes cluster monitoring data successfully retrieved",
             "cluster": "Truk8s Dashboard"
         }
-        
-        return json.dumps(result)
-        
-    except Exception as e:
-        # More detailed error handling
+
+        return result
+
+    except k8sapi.KubeApiError as e:
         print(f"ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
-        error_message = {
+        return {
             "error": str(e),
             "message": "Failed to retrieve Kubernetes cluster data",
             "hint": "Make sure you have a valid kubeconfig file and permissions to access the cluster resources."
         }
-        return json.dumps(error_message)
+    except Exception as e:
+        print(f"ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "error": str(e),
+            "message": "Failed to retrieve Kubernetes cluster data",
+            "hint": "Make sure you have a valid kubeconfig file and permissions to access the cluster resources."
+        }

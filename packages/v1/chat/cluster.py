@@ -1,65 +1,27 @@
 """
 Cluster data fetcher for Truk8s chat.
-Loads kubeconfig from S3, queries the Kubernetes cluster, and returns
+Loads kubeconfig from S3, queries the Kubernetes cluster over the REST API
+(using only stdlib + runtime-shipped libraries, see k8sapi.py), and returns
 a concise context summary suitable for LLM injection.
 """
 
-import json
-import yaml
-from kubernetes import client, config as k8s_config
-from kubernetes.client.rest import ApiException
-
-ACTIVE_MARKER = "kubeconfigs/.active"
+import k8sapi
 
 
 def get_active_config(ctx):
     """
-    Return (key, config_dict) of the active kubeconfig.
+    Return (key, config_dict, error) of the active kubeconfig.
     Reads .active marker; falls back to most recent by LastModified.
     """
-    if not ctx or not hasattr(ctx, "S3_CLIENT") or not ctx.S3_CLIENT:
-        return None, None
-
-    # Try active marker first
-    active_key = ""
-    try:
-        marker = ctx.S3_CLIENT.get_object(Bucket=ctx.S3_DATA, Key=ACTIVE_MARKER)
-        active_key = marker["Body"].read().decode("utf-8").strip()
-    except Exception:
-        pass
-
-    if active_key:
-        try:
-            obj = ctx.S3_CLIENT.get_object(Bucket=ctx.S3_DATA, Key=active_key)
-            raw = obj["Body"].read().decode("utf-8")
-            config = yaml.safe_load(raw)
-            return active_key, config
-        except Exception:
-            pass
-
-    # Fallback: most recent
-    try:
-        response = ctx.S3_CLIENT.list_objects_v2(
-            Bucket=ctx.S3_DATA, Prefix="kubeconfigs/"
-        )
-        contents = [
-            o for o in response.get("Contents", []) if o["Key"] != ACTIVE_MARKER
-        ]
-        if not contents:
-            return None, None
-        latest = max(contents, key=lambda x: x["LastModified"])
-        obj = ctx.S3_CLIENT.get_object(Bucket=ctx.S3_DATA, Key=latest["Key"])
-        raw = obj["Body"].read().decode("utf-8")
-        config = yaml.safe_load(raw)
-        return latest["Key"], config
-    except Exception:
-        return None, None
+    return k8sapi.load_kubeconfig_from_s3(ctx)
 
 
 def load_kubeconfig(ctx):
     """Load the active kubeconfig from S3. Returns the parsed dict or None."""
     try:
-        key, config = get_active_config(ctx)
+        key, config, error = get_active_config(ctx)
+        if error:
+            print(f"cluster.load_kubeconfig: {error}")
         return config
     except Exception as e:
         print(f"cluster.load_kubeconfig error: {e}")
@@ -73,103 +35,104 @@ def fetch_cluster_summary(ctx):
       - context: str (human-readable cluster summary for the LLM)
       - error: str (if not ok)
     """
-    kubeconfig = load_kubeconfig(ctx)
-    if not kubeconfig:
+    try:
+        key, kubeconfig, load_error = get_active_config(ctx)
+    except Exception as e:
+        return {"ok": False, "error": f"No kubeconfig found: {e}", "context": ""}
+    if not kubeconfig or not isinstance(kubeconfig, dict):
+        detail = f" {load_error}" if load_error else ""
         return {
             "ok": False,
-            "error": "No kubeconfig found. Upload a kubeconfig file first.",
+            "error": f"No kubeconfig found. Upload a kubeconfig file first.{detail}",
             "context": "",
         }
 
     try:
-        k8s_config.load_kube_config_from_dict(kubeconfig)
-    except Exception as e:
+        k8s = k8sapi.K8sClient(kubeconfig)
+    except k8sapi.KubeConfigError as e:
         return {"ok": False, "error": f"Invalid kubeconfig: {e}", "context": ""}
 
     try:
-        v1 = client.CoreV1Api()
-        apps_v1 = client.AppsV1Api()
-
-        pods = v1.list_pod_for_all_namespaces(watch=False)
-        pvcs = v1.list_persistent_volume_claim_for_all_namespaces(watch=False)
-        nodes = v1.list_node(watch=False)
-        deployments = apps_v1.list_deployment_for_all_namespaces(watch=False)
-    except ApiException as e:
-        return {
-            "ok": False,
-            "error": f"Kubernetes API error: {e}",
-            "context": "",
-        }
+        pods = k8s.list_all("/api/v1/pods")
+        pvcs = k8s.list_all("/api/v1/persistentvolumeclaims")
+        nodes = k8s.list_all("/api/v1/nodes")
+        deployments = k8s.list_all("/apis/apps/v1/deployments")
+    except k8sapi.KubeApiError as e:
+        return {"ok": False, "error": f"Kubernetes API error: {e}", "context": ""}
     except Exception as e:
         return {"ok": False, "error": f"Cluster connection error: {e}", "context": ""}
 
     # --- Pods ---
     pod_items = []
     pod_counts = {"Running": 0, "Pending": 0, "Failed": 0, "Succeeded": 0}
-    for pod in pods.items:
-        phase = str(pod.status.phase) if pod.status and pod.status.phase else "Unknown"
+    for pod in pods:
+        meta = pod.get("metadata") or {}
+        status = pod.get("status") or {}
+        spec = pod.get("spec") or {}
+        phase = str(status.get("phase") or "Unknown")
         if phase in pod_counts:
             pod_counts[phase] += 1
+        container_statuses = status.get("containerStatuses") or []
+        restarts = sum(
+            (cs.get("restartCount") or 0)
+            for cs in container_statuses
+            if isinstance(cs, dict)
+        )
         pod_items.append(
             {
-                "name": pod.metadata.name,
-                "namespace": pod.metadata.namespace,
+                "name": meta.get("name", ""),
+                "namespace": meta.get("namespace", ""),
                 "status": phase,
-                "node": pod.spec.node_name or "",
-                "restarts": sum(
-                    cs.restart_count or 0
-                    for cs in (pod.status.container_statuses or [])
-                )
-                if pod.status and pod.status.container_statuses
-                else 0,
+                "node": spec.get("nodeName") or "",
+                "restarts": restarts,
             }
         )
 
     # --- PVCs ---
     pvc_items = []
     pvc_counts = {"Bound": 0, "Pending": 0, "Lost": 0}
-    for pvc in pvcs.items:
-        phase = str(pvc.status.phase) if pvc.status and pvc.status.phase else "Unknown"
+    for pvc in pvcs:
+        meta = pvc.get("metadata") or {}
+        status = pvc.get("status") or {}
+        spec = pvc.get("spec") or {}
+        phase = str(status.get("phase") or "Unknown")
         if phase in pvc_counts:
             pvc_counts[phase] += 1
-        capacity = "N/A"
-        if (
-            pvc.spec
-            and hasattr(pvc.spec, "resources")
-            and hasattr(pvc.spec.resources, "requests")
-        ):
-            storage = pvc.spec.resources.requests.get("storage")
-            if storage:
-                capacity = str(storage)
+        resources = spec.get("resources") or {}
+        requests = resources.get("requests") or {} if isinstance(resources, dict) else {}
+        storage = requests.get("storage") if isinstance(requests, dict) else None
+        capacity = str(storage) if storage else "N/A"
         pvc_items.append(
             {
-                "name": pvc.metadata.name,
-                "namespace": pvc.metadata.namespace,
+                "name": meta.get("name", ""),
+                "namespace": meta.get("namespace", ""),
                 "status": phase,
                 "capacity": capacity,
-                "storage_class": pvc.spec.storage_class_name or "",
+                "storage_class": spec.get("storageClassName") or "",
             }
         )
 
     # --- Nodes ---
     node_items = []
     node_counts = {"Ready": 0, "NotReady": 0}
-    for node in nodes.items:
-        status = "Unknown"
-        if node.status and node.status.conditions:
-            for cond in node.status.conditions:
-                if cond.type == "Ready":
-                    status = "Ready" if cond.status == "True" else "NotReady"
-                    break
-        if status in node_counts:
-            node_counts[status] += 1
+    for node in nodes:
+        meta = node.get("metadata") or {}
+        status = node.get("status") or {}
+        state = "Unknown"
+        for cond in status.get("conditions") or []:
+            if isinstance(cond, dict) and cond.get("type") == "Ready":
+                state = "Ready" if cond.get("status") == "True" else "NotReady"
+                break
+        if state in node_counts:
+            node_counts[state] += 1
         alloc = {}
-        if node.status and node.status.allocatable:
-            alloc = {k: str(v) for k, v in node.status.allocatable.items()}
+        allocatable = status.get("allocatable") or {}
+        if isinstance(allocatable, dict):
+            alloc = {k: str(v) for k, v in allocatable.items()}
         node_items.append(
             {
-                "name": node.metadata.name,
-                "status": status,
+                "name": meta.get("name", ""),
+                "status": state,
                 "allocatable_cpu": alloc.get("cpu", ""),
                 "allocatable_memory": alloc.get("memory", ""),
             }
@@ -177,13 +140,15 @@ def fetch_cluster_summary(ctx):
 
     # --- Deployments ---
     dep_items = []
-    for dep in deployments.items:
-        replicas = dep.status.replicas if dep.status else 0
-        ready = dep.status.ready_replicas if dep.status and dep.status.ready_replicas else 0
+    for dep in deployments:
+        meta = dep.get("metadata") or {}
+        status = dep.get("status") or {}
+        replicas = status.get("replicas") or 0
+        ready = status.get("readyReplicas") or 0
         dep_items.append(
             {
-                "name": dep.metadata.name,
-                "namespace": dep.metadata.namespace,
+                "name": meta.get("name", ""),
+                "namespace": meta.get("namespace", ""),
                 "replicas": replicas,
                 "ready_replicas": ready,
             }
